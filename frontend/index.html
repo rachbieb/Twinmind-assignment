@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TwinMind Live Suggestions</title>
+    <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+<div class="app">
+    <div class="app-glow app-glow-left"></div>
+    <div class="app-glow app-glow-right"></div>
+    <header class="app-header">
+        <div class="header-brand">
+            <div class="brand-mark" aria-hidden="true">
+                <span class="brand-mark-core"></span>
+            </div>
+            <div class="brand-copy">
+                <div class="header-title">TwinMind</div>
+                <div class="header-subtitle">Live Suggestions Copilot</div>
+            </div>
+        </div>
+        <div class="header-actions">
+            <button id="exportButton" class="top-action" type="button">Export</button>
+            <button id="settingsButton" class="top-action" type="button">Settings</button>
+        </div>
+    </header>
+
+    <main class="columns">
+        <section class="column-panel transcript-panel">
+            <div class="panel-topline">
+                <div class="panel-title">1. MIC &amp; TRANSCRIPT</div>
+                <div class="panel-status" id="recordingStatusLabel">IDLE</div>
+            </div>
+
+            <button class="mic-status-row" id="recordButton" type="button">
+                <span class="mic-orb">
+                    <span class="mic-orb-core"></span>
+                </span>
+                <span class="mic-status-copy">
+                    <span class="mic-status-text" id="recordingStatusText">Stopped. Click to resume.</span>
+                    <span class="mic-status-caption">Capture audio, transcript, and live prompts in one session.</span>
+                </span>
+            </button>
+
+            <div class="info-card">
+                The transcript scrolls and appends new chunks every ~30 seconds while recording. Use the mic button to start/stop. Export downloads the full session.
+            </div>
+
+            <div class="transcript-list" id="transcriptList"></div>
+            <div class="empty-panel hidden" id="transcriptEmpty">
+                Waiting for transcript chunks...
+            </div>
+        </section>
+
+        <section class="column-panel suggestions-panel">
+            <div class="panel-topline">
+                <div class="panel-title">2. LIVE SUGGESTIONS</div>
+                <div class="panel-status"><span id="batchCount">0</span> BATCHES</div>
+            </div>
+
+            <div class="panel-toolbar">
+                <button class="toolbar-button" id="refreshButton" type="button">Reload suggestions</button>
+                <div class="toolbar-meta" id="refreshMeta">auto-refresh every 30s</div>
+            </div>
+
+            <div class="suggestions-list" id="suggestionsList"></div>
+            <div class="empty-panel" id="suggestionsEmpty">
+                <div class="empty-illustration suggestion-illustration" aria-hidden="true">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+                <div class="empty-hero">3 fresh suggestions every ~30s</div>
+                <div class="empty-copy">Each batch appears at the top. Tap any card to open a detailed answer in chat.</div>
+            </div>
+        </section>
+
+        <section class="column-panel chat-panel">
+            <div class="panel-topline">
+                <div class="panel-title">3. CHAT (DETAILED ANSWERS)</div>
+                <div class="panel-status">SESSION-ONLY</div>
+            </div>
+
+            <div class="chat-list" id="chatList"></div>
+            <div class="empty-panel" id="chatEmpty">
+                <div class="empty-illustration chat-illustration" aria-hidden="true">
+                    <span></span>
+                </div>
+                <div class="empty-hero">Tap a suggestion or ask anything</div>
+                <div class="empty-copy">Answers use the live transcript as context.</div>
+            </div>
+
+            <div class="chat-composer">
+                <input id="chatInput" type="text" placeholder="Ask anything...">
+                <button id="sendButton" type="button">Send</button>
+            </div>
+        </section>
+    </main>
+
+    <div class="toast hidden" id="toast"></div>
+</div>
+
+<div class="modal-shell hidden" id="settingsModal">
+    <div class="modal-card">
+        <div class="modal-header">
+            <div>
+                <h2>Settings</h2>
+                <p>Your Groq API key and prompts are stored locally in your browser. Never sent anywhere except Groq.</p>
+            </div>
+            <button class="close-button" id="closeSettings" type="button">x</button>
+        </div>
+
+        <div class="modal-tabs">
+            <button class="tab-button active" data-tab="api" type="button">API Key</button>
+            <button class="tab-button" data-tab="prompts" type="button">Prompts</button>
+            <button class="tab-button" data-tab="advanced" type="button">Advanced</button>
+        </div>
+
+        <div class="tab-panel" data-panel="api">
+            <label class="field">
+                <span>Groq API key</span>
+                <input id="apiKey" type="password" placeholder="gsk_...">
+            </label>
+            <div class="field-grid two">
+                <label class="field">
+                    <span>Transcription model</span>
+                    <input id="transcriptionModel" type="text">
+                </label>
+                <label class="field">
+                    <span>Suggestions model</span>
+                    <input id="suggestionsModel" type="text">
+                </label>
+                <label class="field">
+                    <span>Chat model</span>
+                    <input id="chatModel" type="text">
+                </label>
+                <label class="field">
+                    <span>Refresh interval (sec)</span>
+                    <input id="refreshIntervalSeconds" type="number" min="10" max="300">
+                </label>
+            </div>
+        </div>
+
+        <div class="tab-panel hidden" data-panel="prompts">
+            <label class="field">
+                <span>Live suggestions prompt</span>
+                <textarea id="suggestionsPrompt" rows="11"></textarea>
+            </label>
+            <label class="field">
+                <span>Detailed answer prompt</span>
+                <textarea id="clickPrompt" rows="8"></textarea>
+            </label>
+            <label class="field">
+                <span>Chat prompt</span>
+                <textarea id="chatPrompt" rows="7"></textarea>
+            </label>
+        </div>
+
+        <div class="tab-panel hidden" data-panel="advanced">
+            <div class="field-grid three">
+                <label class="field">
+                    <span>Suggestions context (chars)</span>
+                    <input id="suggestionsContextChars" type="number" min="1000" max="12000">
+                </label>
+                <label class="field">
+                    <span>Expanded context (chars)</span>
+                    <input id="expandedContextChars" type="number" min="1000" max="16000">
+                </label>
+                <label class="field">
+                    <span>Chat context (chars)</span>
+                    <input id="chatContextChars" type="number" min="1000" max="24000">
+                </label>
+            </div>
+        </div>
+
+        <div class="modal-actions">
+            <button id="resetSettings" class="secondary-button" type="button">Reset to defaults</button>
+            <div class="modal-actions-right">
+                <button id="cancelSettings" class="secondary-button" type="button">Cancel</button>
+                <button id="saveSettings" class="primary-button" type="button">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="./app.js"></script>
+</body>
+</html>

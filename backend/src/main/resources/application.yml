@@ -1,0 +1,15 @@
+server:
+  port: 8080
+
+spring:
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 25MB
+
+app:
+  groq-base-url: https://api.groq.com
+  transcription-model: whisper-large-v3
+  suggestions-model: openai/gpt-oss-120b
+  chat-model: openai/gpt-oss-120b
+  default-refresh-interval-seconds: 30

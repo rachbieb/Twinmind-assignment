@@ -1,0 +1,9 @@
+.idea/
+.vscode/
+.m2/
+backend/.m2/
+backend/target/
+target/
+*.log
+TwinMind.zip
+_docx_extract/
