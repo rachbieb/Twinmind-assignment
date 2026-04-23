@@ -1,5 +1,8 @@
-const API_BASE = window.COACH_API_BASE || "http://localhost:8080/api";
-
+const API_BASE =
+  window.COACH_API_BASE ||
+  (window.location.hostname.includes("localhost")
+    ? "http://localhost:8080/api"
+    : "https://twinmind-coach-copilot.onrender.com/api");
 const state = {
   settings: null,
   defaults: null,
