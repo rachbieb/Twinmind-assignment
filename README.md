@@ -1,6 +1,6 @@
 # TwinMind Live Suggestions Copilot
 
-A full-stack meeting copilot inspired by the TwinMind assignment. The app captures microphone audio in the browser, builds a live transcript, generates live suggestion cards, and turns those suggestions into detailed chat answers with transcript context.
+A full-stack meeting copilot for TwinMind assignment. The app captures microphone audio in the browser, builds a live transcript, generates live suggestion cards, and turns those suggestions into detailed chat answers with transcript context.
 
 The project is split into a separate frontend and backend so the UI can evolve independently from the Java API.
 

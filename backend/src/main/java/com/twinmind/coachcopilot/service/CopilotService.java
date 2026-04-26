@@ -2,6 +2,7 @@ package com.twinmind.coachcopilot.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.twinmind.coachcopilot.config.AppProperties;
 import com.twinmind.coachcopilot.model.ChatMessage;
 import com.twinmind.coachcopilot.model.ChatRequest;
 import com.twinmind.coachcopilot.model.ChatResponse;
@@ -14,9 +15,12 @@ import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -28,19 +32,44 @@ public class CopilotService {
             "what", "why", "how", "when", "where", "who", "which", "can", "could", "should",
             "would", "do", "does", "did", "is", "are", "will", "whats", "what's"
     );
+    private static final Map<Pattern, String> TRANSCRIPTION_CORRECTIONS = buildTranscriptionCorrections();
+    private static final String TRANSCRIPT_CLEANUP_PROMPT = """
+            You are a transcript cleanup assistant.
+            A speech-to-text model has produced a rough transcript chunk from a live conversation.
+
+            Your task:
+            - Correct spelling, punctuation, and obvious transcription mistakes.
+            - Fix likely product and company names when context makes them clear.
+            - Preserve the original meaning.
+            - Do not add new facts.
+            - Do not summarize.
+            - Do not explain your edits.
+            - Return only the corrected transcript text.
+
+            Common examples:
+            - "charge gpt", "chat gpd", "charge ept" -> "ChatGPT"
+            - "open a i" -> "OpenAI"
+            - "gimini" -> "Gemini"
+            - "whats app" -> "WhatsApp"
+            """;
 
     private final GroqClient groqClient;
     private final ObjectMapper objectMapper;
+    private final AppProperties appProperties;
 
-    public CopilotService(GroqClient groqClient, ObjectMapper objectMapper) {
+    public CopilotService(GroqClient groqClient, ObjectMapper objectMapper, AppProperties appProperties) {
         this.groqClient = groqClient;
         this.objectMapper = objectMapper;
+        this.appProperties = appProperties;
     }
 
     public String generateTranscription(String apiKey, String model, byte[] audioBytes, String originalFilename, String contentType) {
         String filename = StringUtils.hasText(originalFilename) ? originalFilename : "chunk.webm";
         String mediaType = StringUtils.hasText(contentType) ? contentType : "audio/webm";
-        return groqClient.transcribe(apiKey, model, audioBytes, filename, mediaType);
+        String transcript = groqClient.transcribe(apiKey, model, audioBytes, filename, mediaType);
+        String normalized = normalizeTranscriptText(transcript);
+        String refined = refineTranscriptWithAi(apiKey, normalized);
+        return normalizeTranscriptText(refined);
     }
 
     public SuggestionBatch generateSuggestions(SuggestionsRequest request) {
@@ -589,6 +618,71 @@ public class CopilotService {
                 || lower.equals("gracias")
                 || lower.equals("дякую.")
                 || lower.equals("дякую");
+    }
+
+    private String normalizeTranscriptText(String transcript) {
+        if (!StringUtils.hasText(transcript)) {
+            return "";
+        }
+
+        String normalized = transcript.trim();
+        for (Map.Entry<Pattern, String> entry : TRANSCRIPTION_CORRECTIONS.entrySet()) {
+            normalized = entry.getKey().matcher(normalized).replaceAll(entry.getValue());
+        }
+        return normalized;
+    }
+
+    private String refineTranscriptWithAi(String apiKey, String transcript) {
+        if (!StringUtils.hasText(apiKey) || !StringUtils.hasText(transcript) || transcript.length() < 8) {
+            return transcript;
+        }
+
+        try {
+            var payload = objectMapper.createObjectNode()
+                    .put("model", appProperties.chatModel())
+                    .put("temperature", 0.0);
+            payload.putArray("messages")
+                    .add(message("system", TRANSCRIPT_CLEANUP_PROMPT))
+                    .add(message("user", transcript));
+
+            String cleaned = groqClient.chatCompletion(apiKey, appProperties.chatModel(), payload);
+            if (!StringUtils.hasText(cleaned)) {
+                return transcript;
+            }
+
+            return stripTranscriptCleanupWrapper(cleaned);
+        } catch (Exception ignored) {
+            return transcript;
+        }
+    }
+
+    private String stripTranscriptCleanupWrapper(String cleaned) {
+        String normalized = cleaned.trim()
+                .replace("\r", "")
+                .replaceAll("^```[a-zA-Z]*\\s*", "")
+                .replaceAll("\\s*```$", "")
+                .trim();
+
+        if ((normalized.startsWith("\"") && normalized.endsWith("\""))
+                || (normalized.startsWith("'") && normalized.endsWith("'"))) {
+            normalized = normalized.substring(1, normalized.length() - 1).trim();
+        }
+
+        return normalized;
+    }
+
+    private static Map<Pattern, String> buildTranscriptionCorrections() {
+        Map<Pattern, String> corrections = new LinkedHashMap<>();
+        corrections.put(pattern("\\b(?:chat|charge|chad|chart)\\s*g\\s*p\\s*(?:t|d|b)\\b"), "ChatGPT");
+        corrections.put(pattern("\\b(?:open\\s*ai|open a i|openayi)\\b"), "OpenAI");
+        corrections.put(pattern("\\b(?:gimini|jimini)\\b"), "Gemini");
+        corrections.put(pattern("\\bwhats\\s*app\\b"), "WhatsApp");
+        corrections.put(pattern("\\b(?:co pilot|copilot)\\b"), "Copilot");
+        return corrections;
+    }
+
+    private static Pattern pattern(String regex) {
+        return Pattern.compile(regex, Pattern.CASE_INSENSITIVE);
     }
 
     private String nowStamp() {
